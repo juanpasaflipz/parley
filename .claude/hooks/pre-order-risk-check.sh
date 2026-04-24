@@ -30,6 +30,15 @@
 
 set -euo pipefail
 
+# Self-filter: Claude Code matchers only filter by tool name, so this hook
+# fires on every Bash call. Bail silently unless the command is the one we
+# actually guard (`python desk/execution.py submit*` or `python -m desk.execution submit*`).
+INPUT="${CLAUDE_TOOL_INPUT:-$( [ -t 0 ] || cat 2>/dev/null || true )}"
+case "$INPUT" in
+    *"desk/execution.py submit"*|*"desk.execution submit"*) ;;
+    *) exit 0 ;;
+esac
+
 PROJECT_ROOT="${PARLEY_PROJECT_ROOT:-$(pwd)}"
 SETTINGS_FILE="${PROJECT_ROOT}/.claude/settings.json"
 LOG_FILE="${PROJECT_ROOT}/incidents/hook-$(date -u +%Y%m%d-%H%M%S).log"

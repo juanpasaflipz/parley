@@ -1,5 +1,5 @@
 {
-  "$schema": "https://code.claude.com/schemas/settings.json",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment_mode": "CRITICAL: 'mode' controls paper vs live trading. NEVER flip to 'live' in a PR. Live mode requires a separate, manually-created .claude/settings.local.json and operator presence. See CLAUDE.md hard rule #1.",
   "mode": "paper",
 
@@ -76,31 +76,47 @@
     ]
   },
 
-  "_comment_hooks": "Hooks fire on specific lifecycle events regardless of LLM decisions. They are the enforcement mechanism for safety properties that must be guaranteed.",
+  "_comment_hooks": "Hooks fire on lifecycle events regardless of LLM decisions. Matchers can only filter by tool name (e.g. 'Bash'); each script reads stdin and self-filters on the actual command string before doing real work.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(python desk/execution.py submit*)",
-        "command": ".claude/hooks/pre-order-risk-check.sh",
-        "description": "Blocks order submission if mode != paper or if hard risk limits are violated. Hard gate — cannot be bypassed by the LLM."
-      },
-      {
-        "matcher": "Bash(python desk/broker.py*)",
-        "command": ".claude/hooks/guard-live-endpoints.sh",
-        "description": "Refuses any broker call that points at live Binance endpoints while mode=paper."
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-order-risk-check.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/guard-live-endpoints.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash(python desk/execution.py submit*)",
-        "command": ".claude/hooks/post-cycle-snapshot.sh",
-        "description": "After order submission completes, updates positions and writes a row to nav_snapshots. Ensures the audit log stays in sync even if the session crashes."
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-cycle-snapshot.sh",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "SessionStart": [
       {
-        "command": ".claude/hooks/session-start-check.sh",
-        "description": "On every session start, verifies .env exists, DATABASE_URL is reachable, and current mode matches what the operator expects."
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-start-check.sh",
+            "timeout": 15
+          }
+        ]
       }
     ]
   },

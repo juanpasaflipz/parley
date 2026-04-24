@@ -23,6 +23,13 @@ if [[ -z "$INPUT" ]] && [[ ! -t 0 ]]; then
     INPUT=$(cat)
 fi
 
+# Self-filter: Claude Code matchers only filter by tool name, so this fires
+# on every Bash call. Only inspect commands that touch the broker module.
+case "$INPUT" in
+    *"desk/broker.py"*|*"desk.broker"*|*"BINANCE_LIVE"*) ;;
+    *) exit 0 ;;
+esac
+
 # Normalize for matching
 INPUT_LOWER=$(echo "$INPUT" | tr '[:upper:]' '[:lower:]')
 
