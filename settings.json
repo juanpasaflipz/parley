@@ -1,0 +1,128 @@
+{
+  "$schema": "https://code.claude.com/schemas/settings.json",
+  "_comment_mode": "CRITICAL: 'mode' controls paper vs live trading. NEVER flip to 'live' in a PR. Live mode requires a separate, manually-created .claude/settings.local.json and operator presence. See CLAUDE.md hard rule #1.",
+  "mode": "paper",
+
+  "_comment_model": "Default model for the main Claude Code supervisor session. Subagents override via their own frontmatter.",
+  "model": "claude-opus-4-7",
+
+  "env": {
+    "PARLEY_MODE": "paper",
+    "PARLEY_PROJECT_ROOT": "${workspaceRoot}",
+    "PARLEY_PYTHON": "${workspaceRoot}/.venv/bin/python"
+  },
+
+  "_comment_permissions": "Allow-list of tool calls the supervisor can make without prompting. Everything else requires confirmation. Subagents inherit NONE of this — they have their own tool lists in their frontmatter.",
+  "permissions": {
+    "allow": [
+      "Bash(python desk/*.py *)",
+      "Bash(python -m desk.*)",
+      "Bash(psql $DATABASE_URL -f schema.sql)",
+      "Bash(psql $DATABASE_URL -c *)",
+      "Bash(uv run *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(mkdir -p incidents/*)",
+      "Bash(mkdir -p reports/*)",
+      "Bash(mkdir -p backtests/runs/*)",
+      "Read(//**)",
+      "Write(incidents/**)",
+      "Write(reports/**)",
+      "Write(backtests/runs/**)",
+      "Write(/tmp/**)",
+      "Glob(**)",
+      "Grep(**)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:api.binance.com)",
+      "WebFetch(domain:testnet.binance.vision)"
+    ],
+    "deny": [
+      "Bash(git push *)",
+      "Bash(git push --force *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(DELETE FROM *)",
+      "Bash(DROP *)",
+      "Bash(TRUNCATE *)",
+      "Bash(curl * api.binance.com *)",
+      "Bash(wget * api.binance.com *)",
+      "Bash(*BINANCE_LIVE*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/credentials.json)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Write(schema.sql)",
+      "Write(CLAUDE.md)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/agents/**)",
+      "Write(.claude/hooks/**)",
+      "Write(LICENSE)",
+      "Write(DISCLAIMER.md)",
+      "Write(.env)",
+      "Write(.env.*)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(psql $DATABASE_URL -c UPDATE*)",
+      "Bash(psql $DATABASE_URL -c INSERT*)",
+      "Write(**)"
+    ]
+  },
+
+  "_comment_hooks": "Hooks fire on specific lifecycle events regardless of LLM decisions. They are the enforcement mechanism for safety properties that must be guaranteed.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(python desk/execution.py submit*)",
+        "command": ".claude/hooks/pre-order-risk-check.sh",
+        "description": "Blocks order submission if mode != paper or if hard risk limits are violated. Hard gate — cannot be bypassed by the LLM."
+      },
+      {
+        "matcher": "Bash(python desk/broker.py*)",
+        "command": ".claude/hooks/guard-live-endpoints.sh",
+        "description": "Refuses any broker call that points at live Binance endpoints while mode=paper."
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(python desk/execution.py submit*)",
+        "command": ".claude/hooks/post-cycle-snapshot.sh",
+        "description": "After order submission completes, updates positions and writes a row to nav_snapshots. Ensures the audit log stays in sync even if the session crashes."
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": ".claude/hooks/session-start-check.sh",
+        "description": "On every session start, verifies .env exists, DATABASE_URL is reachable, and current mode matches what the operator expects."
+      }
+    ]
+  },
+
+  "_comment_mcp": "Postgres MCP for ad-hoc reads (SELECT only). All structured INSERTs go through desk/db.py so the audit log is consistent.",
+  "mcpServers": {
+    "postgres-readonly": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"],
+      "_comment": "This server must be configured as read-only in its own wrapper script if your MCP implementation does not enforce it. Writes from the supervisor must go through desk/db.py, not this MCP."
+    }
+  },
+
+  "_comment_defaults": "Project-wide defaults for subagent invocation. Individual subagent files override.",
+  "defaults": {
+    "subagentTimeoutSeconds": 300,
+    "maxParallelSubagents": 3,
+    "requireValidJSONOutput": true
+  },
+
+  "_comment_telemetry": "No telemetry beacons from Parley itself. Anthropic's standard Claude Code telemetry is separate and unaffected.",
+  "telemetry": {
+    "enabled": false
+  }
+}
